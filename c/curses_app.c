@@ -327,5 +327,151 @@ void update_cd()
 
 void remove_cd()
 {
+	FILE *titles_fp, *temp_fp;
+	char entry[MAX_ENTRY];
+	int cat_length;
+
+	if(current_cd[0] == '\0')
+		return;
+
+	clear_all_screen();
+	mvprintw(PROMPT_LINE, 0, "About to remove CD %s: $s. ",
+			current_cat, current_cd);
+	if(!get_confirm())
+		return;
+
+	cat_length = strlen(current_cat);
+
+	/* Copy the titles file to a temporary, ignoring this CD */
+	titles_fp = fopen(title_file, "r");
+	temp_fp = fopen(temp_file, "w");
+
+	while(fgets(entry, MAX_ENTRY, titles_fp)) {
+		/* Compare catalog number and copy entry if no match */
+		if(strncmp(current_cat, entry, cat_length) != 0)
+			fputs(entry, temp_fp);
+	}
+	fclose(titles_fp);
+	fclose(temp_fp);
+
+	/* Delete the titles file, and rename the temporary file */
+	unlink(title_file);
+	rename(temp_file, title_file);
+
+	/* Now do the same for the tracks file */
+	remove_tracks();
+
+	/* Reset current CD to 'None' */
+	current_cd[0] = '\0';
 }
 
+void remove_tracks()
+{
+	FILE *tracks_fp, *temp_fp;
+	char entry[MAX_ENTRY];
+	int cat_length;
+
+	if(current_cd[0] == '\0')
+		return;
+
+	cat_length = strlen(current_cat);
+	tracks_fp = fopen(tracks_file, "r");
+	if(tracks_fp == (FILE *)NULL) return;
+	temp_fp = fopen(temp_file, "w");
+
+	while(fgets(entry, MAX_ENTRY, tracks_fp)) {
+		/* Compare catalog number and copy entry if no match */
+		if(strncmp(current_cat, entry, cat_length) != 0)
+			fputs(entry, temp_fp);
+	}
+	fclose(tracks_fp);
+	fclose(temp_fp);
+
+	/* Delete teh tracks file, and rename the temporary file */
+	unlink(tracks_file);
+	rename(temp_file, tracks_file);
+}
+
+void count_cds()
+{
+	FILE *titles_fp, *tracks_fp;
+	char entry[MAX_ENTRY];
+	int titles = 0;
+	int tracks = 0;
+
+	titles_fp = fopen(title_file, "r");
+	if(titles_fp) {
+		while(fgets(entry, MAX_ENTRY, titles_fp))
+				titles++;
+		fclose(titles_fp);
+	}
+	tracks_fp = fopen(tracks_file, "r");
+	if(tracks_fp) {
+		while(fgets(entry, MAX_ENTRY, tracks_fp))
+			tracks++;
+		fclose(tracks_file);
+	}
+	mvprintw(ERROR_LINE, 0,
+			"Database contains %d titles, with a total of %d tracks.",
+			titles, tracks);
+	get_return();
+}
+
+void find_cd()
+{
+	char match[MAX_STRING], entry[MAX_ENTRY];
+	FILE *titles_fp;
+	int count = 0;
+	char *found, *title, *catalog;
+
+	mvprintw(Q_LINE, 0, "Enter a string to search for in CD titles: ");
+	get_string(match);
+
+	titles_fp = fopen(title_file, "r");
+	if(titles_fp) {
+		while(fgets(entry, MAX_ENTRY, titles_fp)) {
+			/* Skip past catalog number */
+			catalog = entry;
+			if(found == strstr(catalog, ",")) {
+				*found = '\0';
+				title = found + 1;
+
+				/* Zap the next comma in the entry to reduce it to title only */
+				if(found == strstr(title, ",")) {
+					*found = '\0';
+					/* Now see if the match substring is present */
+					if(found == strstr(title, match)) {
+						count++;
+						strcpy(current_cd, title);
+						strcpy(current_cat, catalog);
+					}
+				}
+			}
+		}
+		fclose(titles_fp);
+	}
+	if(count != 1) {
+		if(count == 0) {
+			mvprintw(ERROR_LINE, 0, "Sorry, no matching CD found. ");
+		}
+		if(count > 1) {
+			mvprintw(ERROR_LINE, 0, "Sorry, match is ambiguous: %d CDs found. ", count);
+		}
+		current_cd[0] = '\0';
+		get_return();
+	}
+}
+
+void list_tracks()
+{
+	FILE *tracks_fp;
+	char entry[MAX_ENTRY];
+	int cat_length;
+	int lines_op = 0;
+	WINDOW *track_pad_ptr;
+	int tracks = 0;
+	int key;
+	int first_line = 0;
+
+	
+}
