@@ -53,7 +53,7 @@ char *extended_menu[] =
 	"update track information",
 	"quit",
 	0,
-}
+};
 
 int main()
 {
@@ -147,12 +147,12 @@ void draw_menu(char *options[], int current_highlight,
 	char **option_ptr;
 	char *txt_ptr;
 	option_ptr = options;
-	while(*optio_ptr) {
+	while(*option_ptr) {
 		if(current_row == current_highlight) attron(A_STANDOUT);
 		txt_ptr = options[current_row];
-		txt_ptr++;
 		mvprintw(start_row + current_row, start_col, "%s", txt_ptr);
-		if(current_row == current_highlight) attroff(A_STATNDOUT);
+		txt_ptr++;
+		if(current_row == current_highlight) attroff(A_STANDOUT);
 		current_row++;
 		option_ptr++;
 	}
@@ -294,16 +294,16 @@ void update_cd()
 		return;
 	box(box_window_ptr, ACS_VLINE, ACS_HLINE);
 
-	sub_window_ptr = subwin(stdscr, BOXED_LINES, BOXED_ROW,
+	sub_window_ptr = subwin(stdscr, BOXED_LINES, BOXED_ROWS,
 							BOX_LINE_POS, BOX_ROW_POS);
 	if(!sub_window_ptr)
 		return;
-	scrollop(sub_window_ptr, TRUE);
+	scrollok(sub_window_ptr, TRUE);
 	werase(sub_window_ptr);
 	touchwin(stdscr);
 
 	do {
-		mvprintw(sub_window_ptr, screen_line++, BOX_ROW_POS + 2,
+		mvwprintw(sub_window_ptr, screen_line++, BOX_ROW_POS + 2,
 				"Track %d: ", track);
 		clrtoeol();
 		refresh();
@@ -409,7 +409,7 @@ void count_cds()
 	if(tracks_fp) {
 		while(fgets(entry, MAX_ENTRY, tracks_fp))
 			tracks++;
-		fclose(tracks_file);
+		fclose(tracks_fp);
 	}
 	mvprintw(ERROR_LINE, 0,
 			"Database contains %d titles, with a total of %d tracks.",
@@ -473,5 +473,85 @@ void list_tracks()
 	int key;
 	int first_line = 0;
 
-	
+	if(current_cd[0] == '\0') {
+		mvprintw(ERROR_LINE, 0, "You must select a CD first. ");
+		get_return();
+		return;
+	}
+	clear_all_screen();
+	cat_length - strlen(current_cat);
+
+	/* First count the number of tracks for the current CD */
+	tracks_fp = fopen(tracks_file, "r");
+	if(!tracks_fp)
+		return;
+	while(fgets(entry, MAX_ENTRY, tracks_fp)) {
+		if(strncmp(current_cat, entry, cat_length) == 0)
+			tracks++;
+	}
+	fclose(tracks_fp);
+
+	/* Make a new pad, ensure that even if there is only a single
+	   track the PAD is large enough so the later prefresh() is always
+	   valid */
+	track_pad_ptr = newpad(tracks + 1 + BOXED_LINES, BOXED_ROWS + 1);
+	if(!track_pad_ptr)
+		return;
+
+	tracks_fp = fopen(tracks_file, "r");
+	if(!tracks_fp)
+		return;
+	mvprintw(4, 0, "CD Track Listing\n");
+
+	/* write the track information into the pad */
+	while(fgets(entry, MAX_ENTRY, tracks_fp)) {
+		/* Compare catlog number and output rest of entry */
+		if(strncmp(current_cat, entry, cat_length) == 0) {
+			mvwprintw(track_pad_ptr, lines_op++, 0, "%s",
+					entry + cat_length + 1);			
+		}
+	}
+	fclose(tracks_fp);
+
+	if(lines_op > BOXED_LINES) {
+		mvprintw(MESSAGE_LINE, 0,
+				"Cursor keys to scrool, RETURN or q to exit");
+	} else {
+		mvprintw(MESSAGE_LINE, 0, "RETURN or q to exit");
+	}
+	wrefresh(stdscr);
+	keypad(stdscr, TRUE);
+	cbreak();
+	noecho();
+	key = 0;
+	while(key != 'q' && key != KEY_ENTER && key != '\n') {
+		if(key == KEY_UP){
+			if(first_line > 0)
+				first_line--;
+		}
+		if(key == KEY_DOWN) {
+			if(first_line + BOXED_LINES + 1 < tracks)
+				first_line++;
+		}
+
+		/* now draw the appropriate part of the pad on the screen */
+		prefresh(track_pad_ptr, first_line, 0,
+				BOX_LINE_POS, BOX_ROW_POS,
+				BOX_LINE_POS + BOXED_LINES, BOX_ROW_POS + BOXED_ROWS);
+		key = getch();
+	}
+
+	delwin(track_pad_ptr);
+	keypad(stdscr, FALSE);
+	nocbreak();
+	echo();
 }
+
+void get_return()
+{
+	int ch;
+	mvprintw(23, 0, "%s", " Press return ");
+	refresh();
+	while((ch = getchar()) != '\n' && ch != EOF);
+}
+
