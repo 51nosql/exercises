@@ -5,7 +5,7 @@
 
 const char *test_file = "/tmp/test_lock";
 
-//Test By lock4.c
+//Test By lock4.c and lock5.c
 
 int main()
 {
