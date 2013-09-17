@@ -37,7 +37,7 @@ int add_cd(char *artist, char *title, char *catalogue, int *cd_id)
 	int res;
 	char is[250];
 	char es[250];
-	int artist = -1;
+	int artist_id = -1;
 	int new_cd_id = -1;
 
 	if(!dbconnected) return 0;
@@ -138,7 +138,7 @@ int add_tracks(struct current_tracks_st *tracks)
 	while(tracks->track[i][0]) {
 		mysql_escape_string(es, tracks->track[i], strlen(tracks->track[i]));
 		sprintf(is, "INSERT INTO track(cd_id, track_id, title) \
-				VALUES(%d, %d, '%s'", tracks->cd_id, i + 1, es);
+				VALUES(%d, %d, '%s')", tracks->cd_id, i + 1, es);
 		res = mysql_query(&my_connection, is);
 		if(res) {
 			fprintf(stderr, "Insert error %d: %s\n",
@@ -149,4 +149,171 @@ int add_tracks(struct current_tracks_st *tracks)
 	}
 	return 1;
 }
+
+int get_cd(int cd_id, struct current_cd_st *dest)
+{
+	MYSQL_RES *res_ptr;
+	MYSQL_ROW mysqlrow;
+
+	int res;
+	char qs[250];
+
+	if(!dbconnected) return 0;
+
+	memset(dest, 0, sizeof(*dest));
+	dest->artist_id = -1;
+
+	sprintf(qs, "SELECT artist.id, cd.id, artist.name, cd.title, cd.catalogue \
+			FROM artist, cd WHERE artist.id = cd.artist_id AND cd.id = %d", cd_id);
+
+	res = mysql_query(&my_connection, qs);
+	if(res) {
+		fprintf(stderr, "SELECT error: %s\n", mysql_error(&my_connection));
+	} else {
+		res_ptr = mysql_store_result(&my_connection);
+		if(res_ptr) {
+			if(mysql_num_rows(res_ptr) > 0) {
+				if(mysqlrow = mysql_fetch_row(res_ptr)) {
+					sscanf(mysqlrow[0], "%d", &dest->artist_id);
+					sscanf(mysqlrow[1], "%d", &dest->cd_id);
+					strcpy(dest->artist_name, mysqlrow[2]);
+					strcpy(dest->title, mysqlrow[3]);
+					strcpy(dest->catalogue, mysqlrow[4]);
+				}
+			}
+			mysql_free_result(res_ptr);
+		}
+	}
+	if(dest->artist_id != -1) return 1;
+	return 0;
+}
+
+int get_cd_tracks(int cd_id, struct current_tracks_st *dest)
+{
+	MYSQL_RES *res_ptr;
+	MYSQL_ROW mysqlrow;
+
+	int res;
+	char qs[250];
+	int i = 0, num_tracks = 0;
+
+	if(!dbconnected) return 0;
+	memset(dest, 0, sizeof(*dest));
+	dest->cd_id = -1;
+
+	sprintf(qs, "SELECT track_id, title FROM track WHERE track.cd_id = %d \
+			ORDER BY track_id", cd_id);
+	
+	res = mysql_query(&my_connection, qs);
+	if(res) {
+		fprintf(stderr, "SELECT error: %s\n", mysql_error(&my_connection));
+	} else {
+		res_ptr = mysql_store_result(&my_connection);
+		if(res_ptr) {
+			if((num_tracks = mysql_num_rows(res_ptr)) > 0) {
+				while(mysqlrow = mysql_fetch_row(res_ptr)) {
+					strcpy(dest->track[i], mysqlrow[1]);
+					i++;
+				}
+				dest->cd_id = cd_id;
+			}
+			mysql_free_result(res_ptr);
+		}
+	}
+	return num_tracks;
+}
+
+int find_cds(char *search_str, struct cd_search_st *dest)
+{
+	MYSQL_RES *res_ptr;
+	MYSQL_ROW mysqlrow;
+
+	int res;
+	char qs[500];
+	int i = 0;
+	char ss[250];
+	int num_rows = 0;
+
+	if(!dbconnected) return 0;
+
+	memset(dest, -1, sizeof(*dest));
+	mysql_escape_string(ss, search_str, strlen(search_str));
+	sprintf(qs, "SELECT DISTINCT artist.id, cd.id FROM artist, cd WHERE artist.id = cd.artist_id AND (artist.name LIKE '%%%s%%' OR cd.title LIKE '%%%s%%' OR cd.catalogue LIKE '%%%s%%')", ss, ss, ss);
+
+	res = mysql_query(&my_connection, qs);
+	if(res) {
+		fprintf(stderr, "SELECT error: %s\n", mysql_error(&my_connection));
+	} else {
+		res_ptr = mysql_store_result(&my_connection);
+		if(res_ptr) {
+			num_rows = mysql_num_rows(res_ptr);
+			if(num_rows > 0) {
+				while((mysqlrow = mysql_fetch_row(res_ptr)) && i < MAX_CD_RESULT) {
+					sscanf(mysqlrow[1], "%d", &dest->cd_id[i]);
+					i++;
+				}
+			}
+			mysql_free_result(res_ptr);
+		}
+	}
+	return num_rows;
+}
+
+int delete_cd(int cd_id)
+{
+	int res;
+	char qs[250];
+	int artist_id, num_rows;
+	MYSQL_RES *res_ptr;
+	MYSQL_ROW mysqlrow;
+
+	if(!dbconnected) return 0;
+
+	artist_id = -1;
+	sprintf(qs, "SELECT artist_id FROM cd WHERE artist_id = "
+			"(SELECT artist_id FROM cd WHERE id = '%d')", cd_id);
+	res = mysql_query(&my_connection, qs);
+	if(res) {
+		fprintf(stderr, "SELECT error: %s\n", mysql_error(&my_connection));
+	} else {
+		res_ptr = mysql_store_result(&my_connection);
+		if(res_ptr) {
+			num_rows = mysql_num_rows(res_ptr);
+			if(num_rows = 1) {
+				/* Artist not used by any other CDs */
+				mysqlrow = mysql_fetch_row(res_ptr);
+				sscanf(mysqlrow[0], "%d", &artist_id);
+			}
+			mysql_free_result(res_ptr);
+		}
+	}
+	sprintf(qs, "DELETE FROM track WHERE cd_id = '%d'", cd_id);
+	res = mysql_query(&my_connection, qs);
+	if(res) {
+		fprintf(stderr, "Delete error (track) %d: %s\n",
+				mysql_errno(&my_connection), mysql_error(&my_connection));
+		return 0;
+	}
+
+	sprintf(qs, "DELETE FROM cd WHERE id='%d'", cd_id);
+	res = mysql_query(&my_connection, qs);
+	if(res) {
+		fprintf(stderr, "Delete error (cd) %d: %s\n",
+				mysql_error(&my_connection), mysql_error(&my_connection));
+		return 0;
+	}
+
+	if(artist_id = -1) {
+		/* Artist entry is now unrelated to any CDs, delete it */
+		sprintf(qs, "DELETE FROM artist WHERE id = '%d'", artist_id);
+		res = mysql_query(&my_connection, qs);
+		if(res) {
+			fprintf(stderr, "Delete error (artist) %d : %s\n",
+					mysql_errno(&my_connection), mysql_error(&my_connection));
+		}
+	}
+
+	return 1;
+}
+
 

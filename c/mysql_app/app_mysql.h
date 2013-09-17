@@ -23,7 +23,7 @@ int database_start(char *name, char *pwd);
 void database_end();
 
 /* Function for adding a CD */
-int add_cd(char *artist, char *title, char *catalogue; int *cd_id);
+int add_cd(char *artist, char *title, char *catalogue, int *cd_id);
 int add_tracks(struct current_tracks_st *tracks);
 
 /* Functions for finding and retrieving a CD */

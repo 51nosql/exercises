@@ -22,7 +22,7 @@ int main()
 	strcpy(ct.track[1], "Kraftig bewegt");
 	strcpy(ct.track[2], "Feierlich und gemessen");
 	strcpy(ct.track[3], "Sturmisch bewegt");
-	add_track(&ct);
+	add_tracks(&ct);
 
 	res = find_cds("Symphony", &cd_res);
 	printf("Found %d cds, first has ID %d\n", res, cd_res.cd_id[0]);
